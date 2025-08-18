@@ -2,46 +2,76 @@ import { supabase } from "@/lib/supabase/browser-client"
 import { TablesInsert, TablesUpdate } from "@/supabase/types"
 
 export const getHomeWorkspaceByUserId = async (userId: string) => {
-  const { data: homeWorkspace, error } = await supabase
-    .from("workspaces")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("is_home", true)
-    .single()
+  try {
+    const { data: homeWorkspace, error } = await supabase
+      .from("workspaces")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("is_home", true)
+      .single()
 
-  if (!homeWorkspace) {
-    throw new Error(error.message)
+    if (error) {
+      console.error("Database error in getHomeWorkspaceByUserId:", error)
+      throw new Error(error.message || "Failed to get home workspace")
+    }
+
+    if (!homeWorkspace) {
+      throw new Error("Home workspace not found")
+    }
+
+    return homeWorkspace.id
+  } catch (error) {
+    console.error("Error in getHomeWorkspaceByUserId:", error)
+    throw error
   }
-
-  return homeWorkspace.id
 }
 
 export const getWorkspaceById = async (workspaceId: string) => {
-  const { data: workspace, error } = await supabase
-    .from("workspaces")
-    .select("*")
-    .eq("id", workspaceId)
-    .single()
+  try {
+    const { data: workspace, error } = await supabase
+      .from("workspaces")
+      .select("*")
+      .eq("id", workspaceId)
+      .single()
 
-  if (!workspace) {
-    throw new Error(error.message)
+    if (error) {
+      console.error("Database error in getWorkspaceById:", error)
+      throw new Error(error.message || "Failed to get workspace")
+    }
+
+    if (!workspace) {
+      throw new Error("Workspace not found")
+    }
+
+    return workspace
+  } catch (error) {
+    console.error("Error in getWorkspaceById:", error)
+    throw error
   }
-
-  return workspace
 }
 
 export const getWorkspacesByUserId = async (userId: string) => {
-  const { data: workspaces, error } = await supabase
-    .from("workspaces")
-    .select("*")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false })
+  try {
+    const { data: workspaces, error } = await supabase
+      .from("workspaces")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
 
-  if (!workspaces) {
-    throw new Error(error.message)
+    if (error) {
+      console.error("Database error in getWorkspacesByUserId:", error)
+      throw new Error(error.message || "Failed to get workspaces")
+    }
+
+    if (!workspaces) {
+      throw new Error("No workspaces found")
+    }
+
+    return workspaces
+  } catch (error) {
+    console.error("Error in getWorkspacesByUserId:", error)
+    throw error
   }
-
-  return workspaces
 }
 
 export const createWorkspace = async (

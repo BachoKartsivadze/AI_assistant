@@ -3,6 +3,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { SubmitButton } from "@/components/ui/submit-button"
 import { createClient } from "@/lib/supabase/server"
+import { getHomeWorkspaceByUserId } from "@/db/workspaces"
 import { Database } from "@/supabase/types"
 import { createServerClient } from "@supabase/ssr"
 import { get } from "@vercel/edge-config"
@@ -34,18 +35,13 @@ export default async function Login({
   const session = (await supabase.auth.getSession()).data.session
 
   if (session) {
-    const { data: homeWorkspace, error } = await supabase
-      .from("workspaces")
-      .select("*")
-      .eq("user_id", session.user.id)
-      .eq("is_home", true)
-      .single()
-
-    if (!homeWorkspace) {
-      throw new Error(error.message)
+    try {
+      const homeWorkspaceId = await getHomeWorkspaceByUserId(session.user.id)
+      return redirect(`/${homeWorkspaceId}/chat`)
+    } catch (error) {
+      // If no home workspace exists, redirect to setup
+      return redirect("/setup")
     }
-
-    return redirect(`/${homeWorkspace.id}/chat`)
   }
 
   const signIn = async (formData: FormData) => {
@@ -65,20 +61,13 @@ export default async function Login({
       return redirect(`/login?message=${error.message}`)
     }
 
-    const { data: homeWorkspace, error: homeWorkspaceError } = await supabase
-      .from("workspaces")
-      .select("*")
-      .eq("user_id", data.user.id)
-      .eq("is_home", true)
-      .single()
-
-    if (!homeWorkspace) {
-      throw new Error(
-        homeWorkspaceError?.message || "An unexpected error occurred"
-      )
+    try {
+      const homeWorkspaceId = await getHomeWorkspaceByUserId(data.user.id)
+      return redirect(`/${homeWorkspaceId}/chat`)
+    } catch (error) {
+      // If no home workspace exists, redirect to setup
+      return redirect("/setup")
     }
-
-    return redirect(`/${homeWorkspace.id}/chat`)
   }
 
   const getEnvVarOrEdgeConfigValue = async (name: string) => {

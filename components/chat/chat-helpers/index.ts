@@ -199,7 +199,8 @@ export const handleHostedChat = async (
   setIsGenerating: React.Dispatch<React.SetStateAction<boolean>>,
   setFirstTokenReceived: React.Dispatch<React.SetStateAction<boolean>>,
   setChatMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>,
-  setToolInUse: React.Dispatch<React.SetStateAction<string>>
+  setToolInUse: React.Dispatch<React.SetStateAction<string>>,
+  chatId?: string
 ) => {
   const provider =
     modelData.provider === "openai" && profile.use_azure_openai
@@ -218,13 +219,25 @@ export const handleHostedChat = async (
     formattedMessages = draftMessages
   }
 
-  const apiEndpoint =
-    provider === "custom" ? "/api/chat/custom" : `/api/chat/${provider}`
+  // Use OpenAI Assistants API for OpenAI provider (unless it's Azure)
+  let apiEndpoint: string
+  let requestBody: any
 
-  const requestBody = {
-    chatSettings: payload.chatSettings,
-    messages: formattedMessages,
-    customModelId: provider === "custom" ? modelData.hostedId : ""
+  if (provider === "openai") {
+    apiEndpoint = "/api/chat/openai-assistants"
+    requestBody = {
+      chatSettings: payload.chatSettings,
+      messages: formattedMessages,
+      chatId: chatId // Pass chatId for thread management
+    }
+  } else {
+    apiEndpoint =
+      provider === "custom" ? "/api/chat/custom" : `/api/chat/${provider}`
+    requestBody = {
+      chatSettings: payload.chatSettings,
+      messages: formattedMessages,
+      customModelId: provider === "custom" ? modelData.hostedId : ""
+    }
   }
 
   const response = await fetchChatResponse(
@@ -293,7 +306,13 @@ export const processResponse = async (
   let fullText = ""
   let contentToAdd = ""
 
-  if (response.body) {
+  // Check if this is a streaming response or a simple JSON response
+  const contentType = response.headers.get("content-type")
+  const isStreaming =
+    contentType?.includes("text/plain") || response.body?.getReader
+
+  if (response.body && isStreaming) {
+    // Handle streaming response (original behavior)
     await consumeReadableStream(
       response.body,
       chunk => {
@@ -341,8 +360,40 @@ export const processResponse = async (
     )
 
     return fullText
+  } else if (contentType?.includes("application/json")) {
+    // Handle simple JSON response (Assistants API)
+    try {
+      const jsonResponse = await response.json()
+      fullText = jsonResponse.message || jsonResponse.content || ""
+
+      setFirstTokenReceived(true)
+      setToolInUse("none")
+
+      setChatMessages(prev =>
+        prev.map(chatMessage => {
+          if (chatMessage.message.id === lastChatMessage.message.id) {
+            const updatedChatMessage: ChatMessage = {
+              message: {
+                ...chatMessage.message,
+                content: fullText
+              },
+              fileItems: chatMessage.fileItems
+            }
+
+            return updatedChatMessage
+          }
+
+          return chatMessage
+        })
+      )
+
+      return fullText
+    } catch (error) {
+      console.error("Error parsing JSON response:", error)
+      throw new Error("Failed to parse response")
+    }
   } else {
-    throw new Error("Response body is null")
+    throw new Error("Response body is null or unsupported content type")
   }
 }
 

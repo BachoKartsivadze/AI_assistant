@@ -1,7 +1,7 @@
 "use client"
 
 import { ChatbotUIContext } from "@/context/context"
-import { getProfileByUserId, updateProfile } from "@/db/profile"
+import { getOrCreateProfileByUserId, updateProfile } from "@/db/profile"
 import {
   getHomeWorkspaceByUserId,
   getWorkspacesByUserId
@@ -21,6 +21,7 @@ import {
   SETUP_STEP_COUNT,
   StepContainer
 } from "../../../components/setup/step-container"
+import { toast } from "sonner"
 
 export default function SetupPage() {
   const {
@@ -61,40 +62,115 @@ export default function SetupPage() {
   const [perplexityAPIKey, setPerplexityAPIKey] = useState("")
   const [openrouterAPIKey, setOpenrouterAPIKey] = useState("")
 
+  // Add fallback for when profile doesn't exist yet
+  const [profileExists, setProfileExists] = useState(false)
+  const [userIdMismatch, setUserIdMismatch] = useState(false)
+
+  const forceSessionRefresh = async () => {
+    try {
+      console.log("Force refreshing session...")
+
+      // Sign out to clear stale session
+      const { error } = await supabase.auth.signOut()
+      if (error) {
+        console.error("Error signing out:", error)
+      } else {
+        console.log("Successfully signed out, redirecting to login")
+        router.push("/login")
+      }
+    } catch (error) {
+      console.error("Error in forceSessionRefresh:", error)
+      // Fallback: just redirect to login
+      router.push("/login")
+    }
+  }
+
   useEffect(() => {
     ;(async () => {
-      const session = (await supabase.auth.getSession()).data.session
+      try {
+        console.log("Setup page: useEffect starting...")
+        const session = (await supabase.auth.getSession()).data.session
 
-      if (!session) {
-        return router.push("/login")
-      } else {
-        const user = session.user
-
-        const profile = await getProfileByUserId(user.id)
-        setProfile(profile)
-        setUsername(profile.username)
-
-        if (!profile.has_onboarded) {
-          setLoading(false)
+        if (!session) {
+          console.log("Setup page: No session found, redirecting to login")
+          return router.push("/login")
         } else {
-          const data = await fetchHostedModels(profile)
+          const user = session.user
+          console.log(`Setup page: User ${user.id} is authenticated`)
+          console.log(`Setup page: User email: ${user.email}`)
+          console.log(`Setup page: User metadata:`, user.user_metadata)
 
-          if (!data) return
+          // Check if user already has a profile
+          try {
+            console.log(
+              `Setup page: Attempting to get/create profile for user ${user.id}`
+            )
+            const profile = await getOrCreateProfileByUserId(user.id)
+            console.log(`Setup page: Got profile for user ${user.id}`)
+            setProfile(profile)
+            setUsername(profile.username)
 
-          setEnvKeyMap(data.envKeyMap)
-          setAvailableHostedModels(data.hostedModels)
+            if (!profile.has_onboarded) {
+              console.log(`Setup page: User ${user.id} needs onboarding`)
+              setLoading(false)
+            } else {
+              console.log(
+                `Setup page: User ${user.id} already onboarded, redirecting to chat`
+              )
+              const data = await fetchHostedModels(profile)
 
-          if (profile["openrouter_api_key"] || data.envKeyMap["openrouter"]) {
-            const openRouterModels = await fetchOpenRouterModels()
-            if (!openRouterModels) return
-            setAvailableOpenRouterModels(openRouterModels)
+              if (!data) return
+
+              setEnvKeyMap(data.envKeyMap)
+              setAvailableHostedModels(data.hostedModels)
+
+              if (
+                profile["openrouter_api_key"] ||
+                data.envKeyMap["openrouter"]
+              ) {
+                const openRouterModels = await fetchOpenRouterModels()
+                if (!openRouterModels) return
+                setAvailableOpenRouterModels(openRouterModels)
+              }
+
+              const homeWorkspaceId = await getHomeWorkspaceByUserId(
+                session.user.id
+              )
+              return router.push(`/${homeWorkspaceId}/chat`)
+            }
+          } catch (profileError) {
+            console.error(
+              `Setup page: Error getting/creating profile for user ${user.id}:`,
+              profileError
+            )
+
+            // Check if it's a user ID mismatch error
+            if (
+              profileError instanceof Error &&
+              profileError.message &&
+              profileError.message.includes("Authentication mismatch")
+            ) {
+              console.error(
+                "Setup page: User ID mismatch detected - user needs to refresh session"
+              )
+              setLoading(false)
+              setUserIdMismatch(true)
+              // Don't set profileExists to true - let the fallback UI handle this
+              return
+            }
+
+            // If profile creation fails, we still want to show the setup page
+            // The user can manually create their profile through the UI
+            setLoading(false)
+
+            // Don't redirect to login - let them stay on setup page
+            // They can try to create their profile manually
           }
-
-          const homeWorkspaceId = await getHomeWorkspaceByUserId(
-            session.user.id
-          )
-          return router.push(`/${homeWorkspaceId}/chat`)
         }
+      } catch (error) {
+        console.error("Setup page: Unexpected error:", error)
+        setLoading(false)
+        // Don't redirect on error - let them stay on setup page
       }
     })()
   }, [])
@@ -112,47 +188,93 @@ export default function SetupPage() {
   }
 
   const handleSaveSetupSetting = async () => {
-    const session = (await supabase.auth.getSession()).data.session
-    if (!session) {
-      return router.push("/login")
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      if (!session) {
+        return router.push("/login")
+      }
+
+      const user = session.user
+      console.log(
+        `handleSaveSetupSetting: Processing setup for user ${user.id}`
+      )
+
+      let profile
+      try {
+        profile = await getOrCreateProfileByUserId(user.id)
+        console.log(`handleSaveSetupSetting: Got profile for user ${user.id}`)
+      } catch (profileError) {
+        console.error(
+          `handleSaveSetupSetting: Error getting/creating profile for user ${user.id}:`,
+          profileError
+        )
+        toast.error("Failed to create profile. Please try again.")
+        return
+      }
+
+      if (!profile) {
+        console.error(
+          `handleSaveSetupSetting: No profile returned for user ${user.id}`
+        )
+        toast.error("No profile found. Please try again.")
+        return
+      }
+
+      const updateProfilePayload: TablesUpdate<"profiles"> = {
+        ...profile,
+        has_onboarded: true,
+        display_name: displayName,
+        username,
+        openai_api_key: openaiAPIKey,
+        openai_organization_id: openaiOrgID,
+        anthropic_api_key: anthropicAPIKey,
+        google_gemini_api_key: googleGeminiAPIKey,
+        mistral_api_key: mistralAPIKey,
+        groq_api_key: groqAPIKey,
+        perplexity_api_key: perplexityAPIKey,
+        openrouter_api_key: openrouterAPIKey,
+        use_azure_openai: useAzureOpenai,
+        azure_openai_api_key: azureOpenaiAPIKey,
+        azure_openai_endpoint: azureOpenaiEndpoint,
+        azure_openai_35_turbo_id: azureOpenai35TurboID,
+        azure_openai_45_turbo_id: azureOpenai45TurboID,
+        azure_openai_45_vision_id: azureOpenai45VisionID,
+        azure_openai_embeddings_id: azureOpenaiEmbeddingsID
+      }
+
+      console.log(
+        `handleSaveSetupSetting: Updating profile for user ${user.id}`
+      )
+      const updatedProfile = await updateProfile(
+        profile.id,
+        updateProfilePayload
+      )
+      setProfile(updatedProfile)
+
+      console.log(
+        `handleSaveSetupSetting: Getting workspaces for user ${user.id}`
+      )
+      const workspaces = await getWorkspacesByUserId(profile.user_id)
+      const homeWorkspace = workspaces.find(w => w.is_home)
+
+      if (!homeWorkspace) {
+        console.error(
+          `handleSaveSetupSetting: No home workspace found for user ${user.id}`
+        )
+        toast.error("No home workspace found. Please try again.")
+        return
+      }
+
+      // There will always be a home workspace
+      setSelectedWorkspace(homeWorkspace)
+      setWorkspaces(workspaces)
+
+      console.log(`handleSaveSetupSetting: Redirecting user ${user.id} to chat`)
+      return router.push(`/${homeWorkspace?.id}/chat`)
+    } catch (error) {
+      console.error("handleSaveSetupSetting: Unexpected error:", error)
+      toast.error("An unexpected error occurred. Please try again.")
     }
-
-    const user = session.user
-    const profile = await getProfileByUserId(user.id)
-
-    const updateProfilePayload: TablesUpdate<"profiles"> = {
-      ...profile,
-      has_onboarded: true,
-      display_name: displayName,
-      username,
-      openai_api_key: openaiAPIKey,
-      openai_organization_id: openaiOrgID,
-      anthropic_api_key: anthropicAPIKey,
-      google_gemini_api_key: googleGeminiAPIKey,
-      mistral_api_key: mistralAPIKey,
-      groq_api_key: groqAPIKey,
-      perplexity_api_key: perplexityAPIKey,
-      openrouter_api_key: openrouterAPIKey,
-      use_azure_openai: useAzureOpenai,
-      azure_openai_api_key: azureOpenaiAPIKey,
-      azure_openai_endpoint: azureOpenaiEndpoint,
-      azure_openai_35_turbo_id: azureOpenai35TurboID,
-      azure_openai_45_turbo_id: azureOpenai45TurboID,
-      azure_openai_45_vision_id: azureOpenai45VisionID,
-      azure_openai_embeddings_id: azureOpenaiEmbeddingsID
-    }
-
-    const updatedProfile = await updateProfile(profile.id, updateProfilePayload)
-    setProfile(updatedProfile)
-
-    const workspaces = await getWorkspacesByUserId(profile.user_id)
-    const homeWorkspace = workspaces.find(w => w.is_home)
-
-    // There will always be a home workspace
-    setSelectedWorkspace(homeWorkspace!)
-    setWorkspaces(workspaces)
-
-    return router.push(`/${homeWorkspace?.id}/chat`)
   }
 
   const renderStep = (stepNum: number) => {
@@ -245,7 +367,73 @@ export default function SetupPage() {
   }
 
   if (loading) {
-    return null
+    return (
+      <div className="flex h-full items-center justify-center">
+        <div className="text-center">
+          <div className="mx-auto size-32 animate-spin rounded-full border-b-2 border-gray-900"></div>
+          <p className="mt-4 text-lg">Loading setup...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // If no profile exists yet, show a message and let the user proceed
+  if (!profileExists && !profile) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <div className="mx-auto max-w-md p-6 text-center">
+          <h2 className="mb-4 text-2xl font-bold">Welcome to Chatbot UI</h2>
+
+          {userIdMismatch ? (
+            <>
+              <div className="mb-4 rounded border border-yellow-400 bg-yellow-100 px-4 py-3 text-yellow-700">
+                <strong>Session Issue Detected</strong>
+                <p className="mt-1 text-sm">
+                  Your browser has a session for a different account that no
+                  longer exists. This commonly happens when you delete an
+                  account and create a new one.
+                </p>
+              </div>
+              <p className="mb-6 text-gray-600">
+                To fix this, please refresh your session by signing out and
+                signing back in.
+              </p>
+              <button
+                onClick={forceSessionRefresh}
+                className="w-full rounded-lg bg-yellow-600 px-6 py-3 text-white transition-colors hover:bg-yellow-700"
+              >
+                Refresh Session & Sign In Again
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="mb-6 text-gray-600">
+                It looks like your profile hasn&apos;t been created yet. This
+                can happen if there was an issue during account creation.
+              </p>
+              <p className="mb-6 text-gray-600">
+                Don&apos;t worry! You can still complete your setup. Click the
+                button below to continue.
+              </p>
+              <div className="space-y-3">
+                <button
+                  onClick={() => setProfileExists(true)}
+                  className="w-full rounded-lg bg-blue-600 px-6 py-3 text-white transition-colors hover:bg-blue-700"
+                >
+                  Continue Setup
+                </button>
+                <button
+                  onClick={forceSessionRefresh}
+                  className="w-full rounded-lg bg-gray-600 px-6 py-3 text-white transition-colors hover:bg-gray-700"
+                >
+                  Refresh Session (if you recently changed accounts)
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    )
   }
 
   return (

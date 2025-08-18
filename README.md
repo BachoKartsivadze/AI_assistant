@@ -4,6 +4,42 @@ The open-source AI chat app for everyone.
 
 <img src="./public/readme/screenshot.png" alt="Chatbot UI" width="600">
 
+## Features
+
+- 🤖 **Multi-Model Support**: OpenAI, Anthropic, Google, Azure, Mistral, Groq, Perplexity, and more
+- 💬 **Real-time Chat**: Stream responses from AI models
+- 🗂️ **File Upload**: Upload and chat with your documents
+- 🔍 **RAG Support**: Retrieval-Augmented Generation with vector search
+- 🎨 **Modern UI**: Built with Tailwind CSS and Radix UI
+- 🌐 **Internationalization**: Multi-language support
+- 🔐 **Authentication**: Secure user authentication with Supabase
+- 📱 **Responsive**: Works on desktop and mobile devices
+
+## New: OpenAI Assistants API Integration
+
+This project now supports the **OpenAI Assistants API** for enhanced conversation capabilities:
+
+- **Persistent Conversations**: Each chat maintains its own thread for better context
+- **Built-in Memory**: The assistant remembers previous interactions within each thread
+- **Future-Ready**: Easy to add tools, file uploads, and other assistant features
+
+### Quick Setup
+
+1. **Set Environment Variables**:
+   ```bash
+   OPENAI_API_KEY=your_openai_api_key_here
+   ASSISTANT_ID=your_openai_assistant_id_here
+   ```
+
+2. **Create an Assistant**:
+   ```bash
+   node scripts/setup-openai-assistant.js
+   ```
+
+3. **Restart the Application**
+
+For detailed setup instructions, see [OpenAI Assistants API Documentation](docs/OPENAI_ASSISTANTS_API.md).
+
 ## Demo
 
 View the latest demo [here](https://x.com/mckaywrigley/status/1738273242283151777?s=20).

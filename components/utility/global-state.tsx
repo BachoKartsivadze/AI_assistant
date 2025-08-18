@@ -3,7 +3,7 @@
 "use client"
 
 import { ChatbotUIContext } from "@/context/context"
-import { getProfileByUserId } from "@/db/profile"
+import { getOrCreateProfileByUserId } from "@/db/profile"
 import { getWorkspaceImageFromStorage } from "@/db/storage/workspace-images"
 import { getWorkspacesByUserId } from "@/db/workspaces"
 import { convertBlobToBase64 } from "@/lib/blob-to-b64"
@@ -158,7 +158,7 @@ export const GlobalState: FC<GlobalStateProps> = ({ children }) => {
     if (session) {
       const user = session.user
 
-      const profile = await getProfileByUserId(user.id)
+      const profile = await getOrCreateProfileByUserId(user.id)
       setProfile(profile)
 
       if (!profile.has_onboarded) {
