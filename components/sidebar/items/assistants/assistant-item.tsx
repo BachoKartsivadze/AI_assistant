@@ -18,7 +18,12 @@ interface AssistantItemProps {
 }
 
 export const AssistantItem: FC<AssistantItemProps> = ({ assistant }) => {
-  const { selectedWorkspace, assistantImages } = useContext(ChatbotUIContext)
+  const {
+    selectedWorkspace,
+    assistantImages,
+    setSelectedAssistant,
+    selectedAssistant
+  } = useContext(ChatbotUIContext)
 
   const [name, setName] = useState(assistant.name)
   const [isTyping, setIsTyping] = useState(false)
@@ -33,6 +38,14 @@ export const AssistantItem: FC<AssistantItemProps> = ({ assistant }) => {
   })
   const [selectedImage, setSelectedImage] = useState<File | null>(null)
   const [imageLink, setImageLink] = useState("")
+
+  // Check if this assistant is currently selected
+  const isSelected = selectedAssistant?.id === assistant.id
+
+  const handleAssistantSelect = () => {
+    setSelectedAssistant(assistant)
+    console.log("🤖 Assistant selected:", assistant.name)
+  }
 
   useEffect(() => {
     const assistantImage =
@@ -109,21 +122,35 @@ export const AssistantItem: FC<AssistantItemProps> = ({ assistant }) => {
       contentType="assistants"
       isTyping={isTyping}
       icon={
-        imageLink ? (
-          <Image
-            style={{ width: "30px", height: "30px" }}
-            className="rounded"
-            src={imageLink}
-            alt={assistant.name}
-            width={30}
-            height={30}
-          />
-        ) : (
-          <IconRobotFace
-            className="bg-primary text-secondary border-primary rounded border-DEFAULT p-1"
-            size={30}
-          />
-        )
+        <div className="flex flex-col items-center space-y-1">
+          <div
+            className="cursor-pointer transition-opacity hover:opacity-80"
+            onClick={handleAssistantSelect}
+            title="Click to select this assistant"
+          >
+            {imageLink ? (
+              <Image
+                style={{ width: "30px", height: "30px" }}
+                className={`rounded ${isSelected ? "ring-2 ring-green-500" : ""}`}
+                src={imageLink}
+                alt={assistant.name}
+                width={30}
+                height={30}
+              />
+            ) : (
+              <IconRobotFace
+                className={`bg-primary text-secondary border-primary rounded border-DEFAULT p-1 ${isSelected ? "ring-2 ring-green-500" : ""}`}
+                size={30}
+              />
+            )}
+          </div>
+          {isSelected && (
+            <div className="text-xs font-medium text-green-600">✓ Selected</div>
+          )}
+          {!isSelected && (
+            <div className="text-xs text-gray-500">Click to select</div>
+          )}
+        </div>
       }
       updateState={{
         image: selectedImage,

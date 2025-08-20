@@ -200,7 +200,9 @@ export const handleHostedChat = async (
   setFirstTokenReceived: React.Dispatch<React.SetStateAction<boolean>>,
   setChatMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>,
   setToolInUse: React.Dispatch<React.SetStateAction<string>>,
-  chatId?: string
+  chatId?: string,
+  newMessageFiles?: any[],
+  selectedAssistantId?: string
 ) => {
   const provider =
     modelData.provider === "openai" && profile.use_azure_openai
@@ -228,7 +230,10 @@ export const handleHostedChat = async (
     requestBody = {
       chatSettings: payload.chatSettings,
       messages: formattedMessages,
-      chatId: chatId // Pass chatId for thread management
+      chatId: chatId, // Pass chatId for thread management
+      newMessageFiles: newMessageFiles, // Pass new message files for attachment
+      workspaceId: payload.workspaceId, // Pass workspaceId for thread creation
+      selectedAssistantId: selectedAssistantId // Pass selectedAssistantId for thread management
     }
   } else {
     apiEndpoint =

@@ -13,7 +13,8 @@ interface CreateFileProps {
 }
 
 export const CreateFile: FC<CreateFileProps> = ({ isOpen, onOpenChange }) => {
-  const { profile, selectedWorkspace } = useContext(ChatbotUIContext)
+  const { profile, selectedWorkspace, selectedAssistant } =
+    useContext(ChatbotUIContext)
 
   const [name, setName] = useState("")
   const [isTyping, setIsTyping] = useState(false)
@@ -81,11 +82,24 @@ export const CreateFile: FC<CreateFileProps> = ({ isOpen, onOpenChange }) => {
 
             <Input
               placeholder="File description..."
-              value={name}
+              value={description}
               onChange={e => setDescription(e.target.value)}
               maxLength={FILE_DESCRIPTION_MAX}
             />
           </div>
+
+          {selectedAssistant && (
+            <div className="text-muted-foreground text-sm">
+              ✅ File will be automatically uploaded to OpenAI and associated
+              with &quot;{selectedAssistant.name}&quot; assistant
+            </div>
+          )}
+
+          {!selectedAssistant && (
+            <div className="text-muted-foreground text-sm">
+              ℹ️ Select an assistant to enable automatic OpenAI integration
+            </div>
+          )}
         </>
       )}
     />

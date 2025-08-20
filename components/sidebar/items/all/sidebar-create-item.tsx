@@ -48,6 +48,7 @@ export const SidebarCreateItem: FC<SidebarCreateItemProps> = ({
 }) => {
   const {
     selectedWorkspace,
+    selectedAssistant,
     setChats,
     setPresets,
     setPrompts,
@@ -197,6 +198,62 @@ export const SidebarCreateItem: FC<SidebarCreateItemProps> = ({
       setCreating(true)
 
       const newItem = await createFunction(createState, selectedWorkspace.id)
+
+      // If this is a file and we have a selected assistant, also upload to OpenAI
+      if (contentType === "files" && selectedAssistant && newItem) {
+        console.log("🚀 Starting OpenAI integration for file:", newItem.name)
+        console.log("📁 File ID:", newItem.id)
+        console.log("🤖 Assistant ID:", selectedAssistant.id)
+
+        try {
+          // Associate file with assistant
+          console.log("🔗 Associating file with assistant...")
+          await createAssistantFiles([
+            {
+              user_id: newItem.user_id,
+              assistant_id: selectedAssistant.id,
+              file_id: newItem.id
+            }
+          ])
+          console.log("✅ File associated with assistant successfully")
+
+          // Upload file to OpenAI
+          console.log("📤 Uploading file to OpenAI...")
+          const response = await fetch("/api/assistants/openai/upload-file", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ fileId: newItem.id })
+          })
+
+          if (response.ok) {
+            const uploadResult = await response.json()
+            console.log(
+              "🎉 File uploaded to OpenAI successfully:",
+              uploadResult.openaiFileId
+            )
+            toast.success(
+              "File uploaded to OpenAI and associated with assistant"
+            )
+          } else {
+            const errorText = await response.text()
+            console.warn(
+              "❌ Failed to upload file to OpenAI:",
+              response.status,
+              errorText
+            )
+            toast.warning("File created but OpenAI upload failed")
+          }
+        } catch (error) {
+          console.error("💥 Failed to integrate file with OpenAI:", error)
+          toast.warning("File created but OpenAI integration failed")
+        }
+      } else {
+        console.log("ℹ️ OpenAI integration skipped:", {
+          contentType,
+          hasSelectedAssistant: !!selectedAssistant,
+          hasNewItem: !!newItem
+        })
+      }
 
       setStateFunction((prevItems: any) => [...prevItems, newItem])
 

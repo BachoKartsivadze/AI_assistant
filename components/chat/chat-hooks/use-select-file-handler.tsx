@@ -1,13 +1,12 @@
 import { ChatbotUIContext } from "@/context/context"
-import { createDocXFile, createFile } from "@/db/files"
+import { createFile } from "@/db/files"
+import { createAssistantFile } from "@/db/assistant-files"
 import { LLM_LIST } from "@/lib/models/llm/llm-list"
-import mammoth from "mammoth"
 import { useContext, useEffect, useState } from "react"
 import { toast } from "sonner"
 
 export const ACCEPTED_FILE_TYPES = [
   "text/csv",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   "application/json",
   "text/markdown",
   "application/pdf",
@@ -19,6 +18,7 @@ export const useSelectFileHandler = () => {
     selectedWorkspace,
     profile,
     chatSettings,
+    selectedAssistant,
     setNewMessageImages,
     setNewMessageFiles,
     setShowFilesDisplay,
@@ -51,149 +51,126 @@ export const useSelectFileHandler = () => {
     setShowFilesDisplay(true)
     setUseRetrieval(true)
 
-    if (file) {
-      let simplifiedFileType = file.type.split("/")[1]
-
-      let reader = new FileReader()
-
-      if (file.type.includes("image")) {
-        reader.readAsDataURL(file)
-      } else if (ACCEPTED_FILE_TYPES.split(",").includes(file.type)) {
-        if (simplifiedFileType.includes("vnd.adobe.pdf")) {
-          simplifiedFileType = "pdf"
-        } else if (
-          simplifiedFileType.includes(
-            "vnd.openxmlformats-officedocument.wordprocessingml.document" ||
-              "docx"
-          )
-        ) {
-          simplifiedFileType = "docx"
-        }
-
-        setNewMessageFiles(prev => [
-          ...prev,
-          {
-            id: "loading",
-            name: file.name,
-            type: simplifiedFileType,
-            file: file
-          }
-        ])
-
-        // Handle docx files
-        if (
-          file.type.includes(
-            "vnd.openxmlformats-officedocument.wordprocessingml.document" ||
-              "docx"
-          )
-        ) {
-          const arrayBuffer = await file.arrayBuffer()
-          const result = await mammoth.extractRawText({
-            arrayBuffer
-          })
-
-          const createdFile = await createDocXFile(
-            result.value,
-            file,
-            {
-              user_id: profile.user_id,
-              description: "",
-              file_path: "",
-              name: file.name,
-              size: file.size,
-              tokens: 0,
-              type: simplifiedFileType
-            },
-            selectedWorkspace.id,
-            chatSettings.embeddingsProvider
-          )
-
-          setFiles(prev => [...prev, createdFile])
-
-          setNewMessageFiles(prev =>
-            prev.map(item =>
-              item.id === "loading"
-                ? {
-                    id: createdFile.id,
-                    name: createdFile.name,
-                    type: createdFile.type,
-                    file: file
-                  }
-                : item
-            )
-          )
-
-          reader.onloadend = null
-
-          return
-        } else {
-          // Use readAsArrayBuffer for PDFs and readAsText for other types
-          file.type.includes("pdf")
-            ? reader.readAsArrayBuffer(file)
-            : reader.readAsText(file)
-        }
-      } else {
-        throw new Error("Unsupported file type")
-      }
-
+    if (file.type.includes("image")) {
+      // Handle image files
+      const reader = new FileReader()
+      reader.readAsDataURL(file)
       reader.onloadend = async function () {
         try {
-          if (file.type.includes("image")) {
-            // Create a temp url for the image file
-            const imageUrl = URL.createObjectURL(file)
-
-            // This is a temporary image for display purposes in the chat input
-            setNewMessageImages(prev => [
-              ...prev,
-              {
-                messageId: "temp",
-                path: "",
-                base64: reader.result, // base64 image
-                url: imageUrl,
-                file
-              }
-            ])
-          } else {
-            const createdFile = await createFile(
-              file,
-              {
-                user_id: profile.user_id,
-                description: "",
-                file_path: "",
-                name: file.name,
-                size: file.size,
-                tokens: 0,
-                type: simplifiedFileType
-              },
-              selectedWorkspace.id,
-              chatSettings.embeddingsProvider
-            )
-
-            setFiles(prev => [...prev, createdFile])
-
-            setNewMessageFiles(prev =>
-              prev.map(item =>
-                item.id === "loading"
-                  ? {
-                      id: createdFile.id,
-                      name: createdFile.name,
-                      type: createdFile.type,
-                      file: file
-                    }
-                  : item
-              )
-            )
-          }
+          const imageUrl = URL.createObjectURL(file)
+          setNewMessageImages(prev => [
+            ...prev,
+            {
+              messageId: "temp",
+              path: "",
+              base64: reader.result,
+              url: imageUrl,
+              file
+            }
+          ])
         } catch (error: any) {
-          toast.error("Failed to upload. " + error?.message, {
+          toast.error("Failed to upload image. " + error?.message, {
             duration: 10000
           })
-          setNewMessageImages(prev =>
-            prev.filter(img => img.messageId !== "temp")
-          )
-          setNewMessageFiles(prev => prev.filter(file => file.id !== "loading"))
         }
       }
+    } else if (ACCEPTED_FILE_TYPES.split(",").includes(file.type)) {
+      // Handle document files
+      setNewMessageFiles(prev => [
+        ...prev,
+        {
+          id: "loading",
+          name: file.name,
+          type: file.type.split("/")[1],
+          file: file
+        }
+      ])
+
+      try {
+        const createdFile = await createFile(
+          file,
+          {
+            user_id: profile.user_id,
+            description: "",
+            file_path: "",
+            name: file.name,
+            size: file.size,
+            tokens: 0,
+            type: file.type.split("/")[1]
+          },
+          selectedWorkspace.id,
+          chatSettings.embeddingsProvider
+        )
+
+        // Automatically associate the uploaded file with the current assistant
+        if (selectedAssistant) {
+          try {
+            await createAssistantFile({
+              user_id: profile.user_id,
+              assistant_id: selectedAssistant.id,
+              file_id: createdFile.id
+            })
+
+            // Upload file to OpenAI for the assistant to use
+            try {
+              const response = await fetch(
+                "/api/assistants/openai/upload-file",
+                {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json"
+                  },
+                  body: JSON.stringify({
+                    fileId: createdFile.id
+                  })
+                }
+              )
+
+              if (response.ok) {
+                const uploadResult = await response.json()
+                console.log(
+                  "File uploaded to OpenAI successfully:",
+                  uploadResult.openaiFileId
+                )(
+                  // Store the OpenAI file ID in the file object for later use
+                  createdFile as any
+                ).openai_file_id = uploadResult.openaiFileId
+              } else {
+                console.warn(
+                  "Failed to upload file to OpenAI:",
+                  await response.text()
+                )
+              }
+            } catch (error) {
+              console.warn("Failed to upload file to OpenAI:", error)
+            }
+          } catch (error) {
+            console.warn("Failed to associate file with assistant:", error)
+          }
+        }
+
+        setFiles(prev => [...prev, createdFile])
+
+        setNewMessageFiles(prev =>
+          prev.map(item =>
+            item.id === "loading"
+              ? {
+                  id: createdFile.id,
+                  name: createdFile.name,
+                  type: createdFile.type,
+                  file: file
+                }
+              : item
+          )
+        )
+      } catch (error: any) {
+        toast.error("Failed to upload. " + error?.message, {
+          duration: 10000
+        })
+        setNewMessageFiles(prev => prev.filter(file => file.id !== "loading"))
+      }
+    } else {
+      toast.error("Unsupported file type")
     }
   }
 

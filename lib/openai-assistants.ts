@@ -151,3 +151,34 @@ export async function getLatestAssistantMessage(
 
   return content.text.value
 }
+
+/**
+ * Attaches a file to a thread
+ */
+export async function attachFileToThread(
+  openai: OpenAI,
+  threadId: string,
+  fileId: string
+): Promise<void> {
+  try {
+    // Check if file is already attached to the thread
+    const messages = await openai.beta.threads.messages.list(threadId)
+
+    // Look for any message that already has this file attached
+    const fileAlreadyAttached = messages.data.some(
+      message => message.file_ids && message.file_ids.includes(fileId)
+    )
+
+    if (!fileAlreadyAttached) {
+      // Attach the file to the thread by creating a message with the file
+      await openai.beta.threads.messages.create(threadId, {
+        role: "user",
+        content: `File ${fileId} is now available for reference.`,
+        file_ids: [fileId]
+      })
+    }
+  } catch (error) {
+    console.warn(`Failed to attach file ${fileId} to thread:`, error)
+    throw error
+  }
+}

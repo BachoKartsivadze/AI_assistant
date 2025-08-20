@@ -267,7 +267,8 @@ export const useChatHandler = () => {
           : [...chatMessages, tempUserChatMessage],
         assistant: selectedChat?.assistant_id ? selectedAssistant : null,
         messageFileItems: retrievedFileItems,
-        chatFileItems: chatFileItems
+        chatFileItems: chatFileItems,
+        workspaceId: selectedWorkspace!.id
       }
 
       let generatedText = ""
@@ -334,7 +335,9 @@ export const useChatHandler = () => {
             setFirstTokenReceived,
             setChatMessages,
             setToolInUse,
-            currentChat?.id
+            selectedChat?.id,
+            newMessageFiles,
+            selectedAssistant?.id
           )
         }
       }
