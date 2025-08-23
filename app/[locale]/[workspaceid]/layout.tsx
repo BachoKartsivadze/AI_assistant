@@ -17,7 +17,7 @@ import { convertBlobToBase64 } from "@/lib/blob-to-b64"
 import { supabase } from "@/lib/supabase/browser-client"
 import { LLMID } from "@/types"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
-import { ReactNode, useContext, useEffect, useState } from "react"
+import { ReactNode, useContext, useEffect, useState, useRef } from "react"
 import Loading from "../loading"
 
 interface WorkspaceLayoutProps {
@@ -81,6 +81,7 @@ export default function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
     setIsGenerating(false)
     setFirstTokenReceived(false)
 
+    // Clear files when workspace changes
     setChatFiles([])
     setChatImages([])
     setNewMessageFiles([])

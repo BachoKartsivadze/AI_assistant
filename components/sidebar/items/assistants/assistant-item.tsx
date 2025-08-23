@@ -4,10 +4,15 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ChatbotUIContext } from "@/context/context"
 import { ASSISTANT_DESCRIPTION_MAX, ASSISTANT_NAME_MAX } from "@/db/limits"
+import { getAssistantCollectionsByAssistantId } from "@/db/assistant-collections"
+import { getAssistantFilesByAssistantId } from "@/db/assistant-files"
+import { getAssistantToolsByAssistantId } from "@/db/assistant-tools"
+import { getCollectionFilesByCollectionId } from "@/db/collection-files"
 import { Tables } from "@/supabase/types"
+import { LLMID } from "@/types"
 import { IconRobotFace } from "@tabler/icons-react"
 import Image from "next/image"
-import { FC, useContext, useEffect, useState } from "react"
+import { FC, useContext, useEffect, useState, useCallback } from "react"
 import profile from "react-syntax-highlighter/dist/esm/languages/hljs/profile"
 import { SidebarItem } from "../all/sidebar-display-item"
 import { AssistantRetrievalSelect } from "./assistant-retrieval-select"
@@ -22,7 +27,14 @@ export const AssistantItem: FC<AssistantItemProps> = ({ assistant }) => {
     selectedWorkspace,
     assistantImages,
     setSelectedAssistant,
-    selectedAssistant
+    selectedAssistant,
+    setChatSettings,
+    setSelectedTools,
+    setChatFiles,
+    setShowFilesDisplay,
+    setUseRetrieval,
+    chatFiles,
+    showFilesDisplay
   } = useContext(ChatbotUIContext)
 
   const [name, setName] = useState(assistant.name)
@@ -42,10 +54,77 @@ export const AssistantItem: FC<AssistantItemProps> = ({ assistant }) => {
   // Check if this assistant is currently selected
   const isSelected = selectedAssistant?.id === assistant.id
 
-  const handleAssistantSelect = () => {
+  const handleAssistantSelect = useCallback(async () => {
     setSelectedAssistant(assistant)
     console.log("🤖 Assistant selected:", assistant.name)
-  }
+
+    // Load assistant's files, collections, and tools
+    let allFiles = []
+
+    const assistantFiles = (await getAssistantFilesByAssistantId(assistant.id))
+      .files
+    allFiles = [...assistantFiles]
+    console.log("📁 Direct assistant files:", assistantFiles.length)
+
+    const assistantCollections = (
+      await getAssistantCollectionsByAssistantId(assistant.id)
+    ).collections
+    for (const collection of assistantCollections) {
+      const collectionFiles = (
+        await getCollectionFilesByCollectionId(collection.id)
+      ).files
+      allFiles = [...allFiles, ...collectionFiles]
+    }
+    console.log("📚 Collection files:", allFiles.length - assistantFiles.length)
+
+    const assistantTools = (await getAssistantToolsByAssistantId(assistant.id))
+      .tools
+
+    // Update chat settings and files
+    setChatSettings({
+      model: assistant.model as LLMID,
+      prompt: assistant.prompt,
+      temperature: assistant.temperature,
+      contextLength: assistant.context_length,
+      includeProfileContext: assistant.include_profile_context,
+      includeWorkspaceInstructions: assistant.include_workspace_instructions,
+      embeddingsProvider: assistant.embeddings_provider as "openai" | "local"
+    })
+
+    setSelectedTools(assistantTools)
+    const chatFileObjects = allFiles.map(file => ({
+      id: file.id,
+      name: file.name,
+      type: file.type,
+      file: null
+    }))
+
+    console.log("📋 Setting chat files:", chatFileObjects)
+    setChatFiles(chatFileObjects)
+
+    // Enable retrieval if there are files
+    if (allFiles.length > 0) {
+      setUseRetrieval(true)
+    }
+
+    if (allFiles.length > 0) {
+      setShowFilesDisplay(true)
+      console.log("✅ Files display enabled")
+    } else {
+      console.log("❌ No files to display")
+    }
+
+    console.log("📁 Total files loaded:", allFiles.length)
+    console.log("🔧 Tools loaded:", assistantTools.length)
+  }, [
+    assistant,
+    setSelectedAssistant,
+    setChatSettings,
+    setSelectedTools,
+    setChatFiles,
+    setUseRetrieval,
+    setShowFilesDisplay
+  ])
 
   useEffect(() => {
     const assistantImage =
@@ -53,6 +132,19 @@ export const AssistantItem: FC<AssistantItemProps> = ({ assistant }) => {
         ?.base64 || ""
     setImageLink(assistantImage)
   }, [assistant, assistantImages])
+
+  // Reload files if they get cleared by layout changes
+  useEffect(() => {
+    if (isSelected && chatFiles.length === 0) {
+      console.log("🔄 Files were cleared, reloading...")
+      // Add a small delay to prevent rapid re-execution
+      const timeoutId = setTimeout(() => {
+        handleAssistantSelect()
+      }, 100)
+
+      return () => clearTimeout(timeoutId)
+    }
+  }, [isSelected, chatFiles.length, handleAssistantSelect])
 
   const handleFileSelect = (
     file: Tables<"files">,

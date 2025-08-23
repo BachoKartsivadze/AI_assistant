@@ -57,6 +57,7 @@ export const useChatHandler = () => {
     setChatFileItems,
     setToolInUse,
     useRetrieval,
+    setUseRetrieval,
     sourceCount,
     setIsPromptPickerOpen,
     setIsFilePickerOpen,
@@ -142,7 +143,10 @@ export const useChatHandler = () => {
         }))
       )
 
-      if (allFiles.length > 0) setShowFilesDisplay(true)
+      if (allFiles.length > 0) {
+        setShowFilesDisplay(true)
+        setUseRetrieval(true)
+      }
     } else if (selectedPreset) {
       setChatSettings({
         model: selectedPreset.model as LLMID,
