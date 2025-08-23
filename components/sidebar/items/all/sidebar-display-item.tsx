@@ -41,29 +41,7 @@ export const SidebarItem: FC<SidebarItemProps> = ({
     prompts: async (item: any) => {},
     files: async (item: any) => {},
     collections: async (item: any) => {},
-    assistants: async (assistant: Tables<"assistants">) => {
-      if (!selectedWorkspace) return
-
-      const createdChat = await createChat({
-        user_id: assistant.user_id,
-        workspace_id: selectedWorkspace.id,
-        assistant_id: assistant.id,
-        context_length: assistant.context_length,
-        include_profile_context: assistant.include_profile_context,
-        include_workspace_instructions:
-          assistant.include_workspace_instructions,
-        model: assistant.model,
-        name: `Chat with ${assistant.name}`,
-        prompt: assistant.prompt,
-        temperature: assistant.temperature,
-        embeddings_provider: assistant.embeddings_provider
-      })
-
-      setChats(prevState => [createdChat, ...prevState])
-      setSelectedAssistant(assistant)
-
-      return router.push(`/${selectedWorkspace.id}/chat/${createdChat.id}`)
-    },
+    // Removed assistants action completely to prevent any automatic triggering
     tools: async (item: any) => {},
     models: async (item: any) => {}
   }
@@ -85,6 +63,100 @@ export const SidebarItem: FC<SidebarItemProps> = ({
   //   await action(item as any)
   // }
 
+  // For assistants, render a custom wrapper that doesn't use SidebarUpdateItem
+  if (contentType === "assistants") {
+    return (
+      <div className="relative">
+        <div
+          ref={itemRef}
+          className={cn(
+            "hover:bg-accent flex w-full cursor-default items-center rounded p-2 focus:outline-none"
+          )}
+          tabIndex={0}
+          onKeyDown={handleKeyDown}
+          onMouseEnter={() => setIsHovering(true)}
+          onMouseLeave={() => setIsHovering(false)}
+          onClick={e => {
+            // Do nothing for assistants - this prevents automatic chat creation
+            e.preventDefault()
+            e.stopPropagation()
+          }}
+        >
+          {icon}
+
+          <div className="ml-3 flex-1 truncate text-sm font-semibold">
+            {item.name}
+          </div>
+
+          {/* Action buttons */}
+          {isHovering && (
+            <div className="flex items-center space-x-1">
+              {/* Edit button - opens edit mode */}
+              <WithTooltip
+                delayDuration={1000}
+                display={<div>Edit {contentType.slice(0, -1)}</div>}
+                trigger={
+                  <IconEdit
+                    className="cursor-pointer hover:text-blue-500"
+                    size={20}
+                    onClick={e => {
+                      e.stopPropagation()
+                      // For assistants, we don't want to trigger edit mode
+                      // since it might call the action
+                    }}
+                  />
+                }
+              />
+
+              {/* Action button (e.g., start chat for assistants) */}
+              <WithTooltip
+                delayDuration={1000}
+                display={<div>Start chat with {contentType.slice(0, -1)}</div>}
+                trigger={
+                  <IconSquarePlus
+                    className="cursor-pointer hover:text-blue-500"
+                    size={20}
+                    onClick={async e => {
+                      e.stopPropagation()
+                      if (selectedWorkspace) {
+                        const assistant = item as Tables<"assistants">
+
+                        // Create a new chat with the assistant when the "choose assistant" button is clicked
+                        const createdChat = await createChat({
+                          user_id: assistant.user_id,
+                          workspace_id: selectedWorkspace.id,
+                          assistant_id: assistant.id,
+                          context_length: assistant.context_length,
+                          include_profile_context:
+                            assistant.include_profile_context,
+                          include_workspace_instructions:
+                            assistant.include_workspace_instructions,
+                          model: assistant.model,
+                          name: `Chat with ${assistant.name}`,
+                          prompt: assistant.prompt,
+                          temperature: assistant.temperature,
+                          embeddings_provider: assistant.embeddings_provider
+                        })
+
+                        setChats(prevState => [createdChat, ...prevState])
+                        setSelectedAssistant(assistant)
+
+                        router.push(
+                          `/${selectedWorkspace.id}/chat/${createdChat.id}`
+                        )
+                      }
+                    }}
+                  />
+                }
+              />
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  // For other content types, use the normal SidebarUpdateItem
   return (
     <SidebarUpdateItem
       item={item}
@@ -130,27 +202,6 @@ export const SidebarItem: FC<SidebarItemProps> = ({
                 />
               }
             />
-
-            {/* Action button (e.g., start chat for assistants) */}
-            {contentType === "assistants" && (
-              <WithTooltip
-                delayDuration={1000}
-                display={<div>Start chat with {contentType.slice(0, -1)}</div>}
-                trigger={
-                  <IconSquarePlus
-                    className="cursor-pointer hover:text-blue-500"
-                    size={20}
-                    onClick={async e => {
-                      e.stopPropagation()
-                      const action = actionMap[contentType]
-                      if (action) {
-                        await action(item as any)
-                      }
-                    }}
-                  />
-                }
-              />
-            )}
           </div>
         )}
       </div>
