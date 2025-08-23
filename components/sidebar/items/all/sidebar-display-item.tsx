@@ -5,7 +5,9 @@ import { Tables } from "@/supabase/types"
 import { ContentType, DataItemType } from "@/types"
 import { useRouter } from "next/navigation"
 import { FC, useContext, useRef, useState } from "react"
+import { IconEdit, IconSquarePlus } from "@tabler/icons-react"
 import { SidebarUpdateItem } from "./sidebar-update-item"
+import { WithTooltip } from "@/components/ui/with-tooltip"
 
 interface SidebarItemProps {
   item: DataItemType
@@ -94,7 +96,7 @@ export const SidebarItem: FC<SidebarItemProps> = ({
       <div
         ref={itemRef}
         className={cn(
-          "hover:bg-accent flex w-full cursor-pointer items-center rounded p-2 hover:opacity-50 focus:outline-none"
+          "hover:bg-accent flex w-full cursor-default items-center rounded p-2 focus:outline-none"
         )}
         tabIndex={0}
         onKeyDown={handleKeyDown}
@@ -107,20 +109,50 @@ export const SidebarItem: FC<SidebarItemProps> = ({
           {item.name}
         </div>
 
-        {/* TODO */}
-        {/* {isHovering && (
-          <WithTooltip
-            delayDuration={1000}
-            display={<div>Start chat with {contentType.slice(0, -1)}</div>}
-            trigger={
-              <IconSquarePlus
-                className="cursor-pointer hover:text-blue-500"
-                size={20}
-                onClick={handleClickAction}
+        {/* Action buttons */}
+        {isHovering && (
+          <div className="flex items-center space-x-1">
+            {/* Edit button - opens edit mode */}
+            <WithTooltip
+              delayDuration={1000}
+              display={<div>Edit {contentType.slice(0, -1)}</div>}
+              trigger={
+                <IconEdit
+                  className="cursor-pointer hover:text-blue-500"
+                  size={20}
+                  onClick={e => {
+                    e.stopPropagation()
+                    // Trigger the edit mode by clicking the parent div
+                    if (itemRef.current) {
+                      itemRef.current.click()
+                    }
+                  }}
+                />
+              }
+            />
+
+            {/* Action button (e.g., start chat for assistants) */}
+            {contentType === "assistants" && (
+              <WithTooltip
+                delayDuration={1000}
+                display={<div>Start chat with {contentType.slice(0, -1)}</div>}
+                trigger={
+                  <IconSquarePlus
+                    className="cursor-pointer hover:text-blue-500"
+                    size={20}
+                    onClick={async e => {
+                      e.stopPropagation()
+                      const action = actionMap[contentType]
+                      if (action) {
+                        await action(item as any)
+                      }
+                    }}
+                  />
+                }
               />
-            }
-          />
-        )} */}
+            )}
+          </div>
+        )}
       </div>
     </SidebarUpdateItem>
   )

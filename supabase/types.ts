@@ -203,8 +203,6 @@ export type Database = {
           include_workspace_instructions: boolean
           model: string
           name: string
-          openai_assistant_id: string | null
-          openai_thread_id: string | null
           prompt: string
           sharing: string
           temperature: number
@@ -223,8 +221,6 @@ export type Database = {
           include_workspace_instructions: boolean
           model: string
           name: string
-          openai_assistant_id?: string | null
-          openai_thread_id?: string | null
           prompt: string
           sharing?: string
           temperature: number
@@ -243,8 +239,6 @@ export type Database = {
           include_workspace_instructions?: boolean
           model?: string
           name?: string
-          openai_assistant_id?: string | null
-          openai_thread_id?: string | null
           prompt?: string
           sharing?: string
           temperature?: number
@@ -312,6 +306,7 @@ export type Database = {
           include_workspace_instructions: boolean
           model: string
           name: string
+          openai_thread_id: string | null
           prompt: string
           sharing: string
           temperature: number
@@ -330,6 +325,7 @@ export type Database = {
           include_workspace_instructions: boolean
           model: string
           name: string
+          openai_thread_id?: string | null
           prompt: string
           sharing?: string
           temperature: number
@@ -348,6 +344,7 @@ export type Database = {
           include_workspace_instructions?: boolean
           model?: string
           name?: string
+          openai_thread_id?: string | null
           prompt?: string
           sharing?: string
           temperature?: number
@@ -592,6 +589,7 @@ export type Database = {
           folder_id: string | null
           id: string
           name: string
+          openai_file_id: string | null
           sharing: string
           size: number
           tokens: number
@@ -606,6 +604,7 @@ export type Database = {
           folder_id?: string | null
           id?: string
           name: string
+          openai_file_id?: string | null
           sharing?: string
           size: number
           tokens: number
@@ -620,6 +619,7 @@ export type Database = {
           folder_id?: string | null
           id?: string
           name?: string
+          openai_file_id?: string | null
           sharing?: string
           size?: number
           tokens?: number
@@ -1134,6 +1134,57 @@ export type Database = {
           },
         ]
       }
+      threads: {
+        Row: {
+          chat_id: string | null
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          openai_thread_id: string
+          updated_at: string | null
+          user_id: string
+          workspace_id: string
+        }
+        Insert: {
+          chat_id?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          openai_thread_id: string
+          updated_at?: string | null
+          user_id: string
+          workspace_id: string
+        }
+        Update: {
+          chat_id?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          openai_thread_id?: string
+          updated_at?: string | null
+          user_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "threads_chat_id_fkey"
+            columns: ["chat_id"]
+            isOneToOne: false
+            referencedRelation: "chats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "threads_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tool_workspaces: {
         Row: {
           created_at: string
@@ -1315,6 +1366,10 @@ export type Database = {
       delete_storage_object_from_bucket: {
         Args: { bucket_name: string; object_path: string }
         Returns: Record<string, unknown>
+      }
+      get_or_create_thread: {
+        Args: { p_chat_id?: string; p_user_id: string; p_workspace_id: string }
+        Returns: string
       }
       match_file_items_local: {
         Args: {
