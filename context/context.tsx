@@ -64,8 +64,6 @@ interface ChatbotUIContext {
   setSelectedAssistant: Dispatch<SetStateAction<Tables<"assistants"> | null>>
   assistantImages: AssistantImage[]
   setAssistantImages: Dispatch<SetStateAction<AssistantImage[]>>
-  openaiAssistants: any[]
-  setOpenaiAssistants: Dispatch<SetStateAction<any[]>>
 
   // PASSIVE CHAT STORE
   userInput: string
@@ -190,8 +188,6 @@ export const ChatbotUIContext = createContext<ChatbotUIContext>({
   setSelectedAssistant: () => {},
   assistantImages: [],
   setAssistantImages: () => {},
-  openaiAssistants: [],
-  setOpenaiAssistants: () => {},
 
   // PASSIVE CHAT STORE
   userInput: "",

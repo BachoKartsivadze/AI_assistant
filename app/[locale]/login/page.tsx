@@ -64,13 +64,14 @@ export default async function Login({
     if (error) {
       return redirect(`/login?message=${error.message}`)
     }
+    console.log("Auth user id:", data.user?.id)
 
     const { data: homeWorkspace, error: homeWorkspaceError } = await supabase
       .from("workspaces")
       .select("*")
       .eq("user_id", data.user.id)
       .eq("is_home", true)
-      .single()
+      .maybeSingle()
 
     if (!homeWorkspace) {
       throw new Error(
@@ -78,6 +79,7 @@ export default async function Login({
       )
     }
 
+    console.log("Resolved workspace:", JSON.stringify(homeWorkspace))
     return redirect(`/${homeWorkspace.id}/chat`)
   }
 

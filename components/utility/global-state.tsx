@@ -71,7 +71,6 @@ export const GlobalState: FC<GlobalStateProps> = ({ children }) => {
   const [selectedAssistant, setSelectedAssistant] =
     useState<Tables<"assistants"> | null>(null)
   const [assistantImages, setAssistantImages] = useState<AssistantImage[]>([])
-  const [openaiAssistants, setOpenaiAssistants] = useState<any[]>([])
 
   // PASSIVE CHAT STORE
   const [userInput, setUserInput] = useState<string>("")
@@ -251,8 +250,6 @@ export const GlobalState: FC<GlobalStateProps> = ({ children }) => {
         setSelectedAssistant,
         assistantImages,
         setAssistantImages,
-        openaiAssistants,
-        setOpenaiAssistants,
 
         // PASSIVE CHAT STORE
         userInput,

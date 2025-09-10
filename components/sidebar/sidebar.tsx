@@ -7,6 +7,7 @@ import { TabsContent } from "../ui/tabs"
 import { WorkspaceSwitcher } from "../utility/workspace-switcher"
 import { WorkspaceSettings } from "../workspace/workspace-settings"
 import { SidebarContent } from "./sidebar-content"
+import { SidebarAssistantPicker } from "./assistant-picker"
 
 interface SidebarProps {
   contentType: ContentType
@@ -66,6 +67,8 @@ export const Sidebar: FC<SidebarProps> = ({ contentType, showSidebar }) => {
 
           <WorkspaceSettings />
         </div>
+
+        <SidebarAssistantPicker />
 
         {(() => {
           switch (contentType) {
