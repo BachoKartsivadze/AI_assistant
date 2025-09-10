@@ -1,5 +1,6 @@
 import { ChatbotUIContext } from "@/context/context"
 import { createDocXFile, createFile } from "@/db/files"
+import { createAssistantFile } from "@/db/assistant-files"
 import { LLM_LIST } from "@/lib/models/llm/llm-list"
 import mammoth from "mammoth"
 import { useContext, useEffect, useState } from "react"
@@ -19,6 +20,7 @@ export const useSelectFileHandler = () => {
     selectedWorkspace,
     profile,
     chatSettings,
+    selectedAssistant,
     setNewMessageImages,
     setNewMessageFiles,
     setShowFilesDisplay,
@@ -31,6 +33,21 @@ export const useSelectFileHandler = () => {
   useEffect(() => {
     handleFilesToAccept()
   }, [chatSettings?.model])
+
+  const attachFileToAssistant = async (fileId: string) => {
+    if (!selectedAssistant || !profile) return
+
+    try {
+      await createAssistantFile({
+        user_id: profile.user_id,
+        assistant_id: selectedAssistant.id,
+        file_id: fileId
+      })
+    } catch (error) {
+      console.error("Failed to attach file to assistant:", error)
+      // Don't show error toast as this is a background operation
+    }
+  }
 
   const handleFilesToAccept = () => {
     const model = chatSettings?.model
@@ -110,6 +127,9 @@ export const useSelectFileHandler = () => {
 
           setFiles(prev => [...prev, createdFile])
 
+          // Attach file to current assistant if one is selected
+          await attachFileToAssistant(createdFile.id)
+
           setNewMessageFiles(prev =>
             prev.map(item =>
               item.id === "loading"
@@ -170,6 +190,9 @@ export const useSelectFileHandler = () => {
             )
 
             setFiles(prev => [...prev, createdFile])
+
+            // Attach file to current assistant if one is selected
+            await attachFileToAssistant(createdFile.id)
 
             setNewMessageFiles(prev =>
               prev.map(item =>
