@@ -196,7 +196,8 @@ export const ChatUI: FC<ChatUIProps> = ({}) => {
           }))
         )
 
-        if (allFiles.length > 0) setShowFilesDisplay(true)
+        // Hide files display by default - user can show it if needed
+        setShowFilesDisplay(false)
       }
     }
 
