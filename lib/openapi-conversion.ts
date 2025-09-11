@@ -1,4 +1,11 @@
-import $RefParser from "@apidevtools/json-schema-ref-parser"
+// Dynamic import to handle HMR issues with @jsdevtools/ono
+let $RefParser: any
+try {
+  $RefParser = require("@apidevtools/json-schema-ref-parser").default
+} catch (error) {
+  // Fallback for HMR issues
+  $RefParser = require("@apidevtools/json-schema-ref-parser")
+}
 
 interface OpenAPIData {
   info: {

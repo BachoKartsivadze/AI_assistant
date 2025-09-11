@@ -27,6 +27,18 @@ module.exports = withBundleAnalyzer(
     },
     experimental: {
       serverComponentsExternalPackages: ["sharp", "onnxruntime-node"]
+    },
+    webpack: (config, { dev, isServer }) => {
+      // Fix for @jsdevtools/ono HMR issue
+      if (dev && !isServer) {
+        config.resolve.fallback = {
+          ...config.resolve.fallback,
+          fs: false,
+          path: false,
+          os: false,
+        }
+      }
+      return config
     }
   })
 )
