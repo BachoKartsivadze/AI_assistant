@@ -10,7 +10,7 @@ export const uploadFile = async (
   }
 ) => {
   const SIZE_LIMIT = parseInt(
-    process.env.NEXT_PUBLIC_USER_FILE_SIZE_LIMIT || "10000000"
+    process.env.NEXT_PUBLIC_USER_FILE_SIZE_LIMIT || "100000000" // Increased to 100MB default
   )
 
   if (file.size > SIZE_LIMIT) {
