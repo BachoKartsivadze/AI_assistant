@@ -1,7 +1,10 @@
 import Loading from "@/app/[locale]/loading"
 import { useChatHandler } from "@/components/chat/chat-hooks/use-chat-handler"
 import { ChatbotUIContext } from "@/context/context"
+import { getAssistantFilesByAssistantId } from "@/db/assistant-files"
 import { getAssistantToolsByAssistantId } from "@/db/assistant-tools"
+import { getAssistantCollectionsByAssistantId } from "@/db/assistant-collections"
+import { getCollectionFilesByCollectionId } from "@/db/collection-files"
 import { getChatFilesByChatId } from "@/db/chat-files"
 import { getChatById } from "@/db/chats"
 import { getMessageFileItemsByMessageId } from "@/db/message-file-items"
@@ -166,6 +169,34 @@ export const ChatUI: FC<ChatUIProps> = ({}) => {
           await getAssistantToolsByAssistantId(assistant.id)
         ).tools
         setSelectedTools(assistantTools)
+
+        // Fetch assistant files and collections
+        let allFiles = []
+
+        const assistantFiles = (
+          await getAssistantFilesByAssistantId(assistant.id)
+        ).files
+        allFiles = [...assistantFiles]
+        const assistantCollections = (
+          await getAssistantCollectionsByAssistantId(assistant.id)
+        ).collections
+        for (const collection of assistantCollections) {
+          const collectionFiles = (
+            await getCollectionFilesByCollectionId(collection.id)
+          ).files
+          allFiles = [...allFiles, ...collectionFiles]
+        }
+
+        setChatFiles(
+          allFiles.map(file => ({
+            id: file.id,
+            name: file.name,
+            type: file.type,
+            file: null
+          }))
+        )
+
+        if (allFiles.length > 0) setShowFilesDisplay(true)
       }
     }
 

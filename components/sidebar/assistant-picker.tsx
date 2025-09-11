@@ -1,6 +1,8 @@
 import { Tables } from "@/supabase/types"
 import { ChatbotUIContext } from "@/context/context"
+import { createChat } from "@/db/chats"
 import { IconRobotFace, IconChevronDown } from "@tabler/icons-react"
+import { useRouter } from "next/navigation"
 import { FC, useContext, useState, useRef, useEffect } from "react"
 import { Button } from "../ui/button"
 import {
@@ -14,19 +16,45 @@ import Image from "next/image"
 interface SidebarAssistantPickerProps {}
 
 export const SidebarAssistantPicker: FC<SidebarAssistantPickerProps> = ({}) => {
+  const router = useRouter()
+
   const {
     assistants,
     assistantImages,
     selectedAssistant,
-    setSelectedAssistant
+    selectedWorkspace,
+    setSelectedAssistant,
+    setChats
   } = useContext(ChatbotUIContext)
 
   const [isOpen, setIsOpen] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
 
-  const handleAssistantSelect = (assistant: Tables<"assistants">) => {
+  const handleAssistantSelect = async (assistant: Tables<"assistants">) => {
+    if (!selectedWorkspace) return
+
     setSelectedAssistant(assistant)
     setIsOpen(false)
+
+    // Create a new chat with the selected assistant
+    const createdChat = await createChat({
+      user_id: assistant.user_id,
+      workspace_id: selectedWorkspace.id,
+      assistant_id: assistant.id,
+      context_length: assistant.context_length,
+      include_profile_context: assistant.include_profile_context,
+      include_workspace_instructions: assistant.include_workspace_instructions,
+      model: assistant.model,
+      name: `Chat with ${assistant.name}`,
+      prompt: assistant.prompt,
+      temperature: assistant.temperature,
+      embeddings_provider: assistant.embeddings_provider
+    })
+
+    setChats(prevState => [createdChat, ...prevState])
+
+    // Navigate to the new chat (fetchChat will handle loading files and settings)
+    return router.push(`/${selectedWorkspace.id}/chat/${createdChat.id}`)
   }
 
   const getAssistantImage = (assistant: Tables<"assistants">) => {
