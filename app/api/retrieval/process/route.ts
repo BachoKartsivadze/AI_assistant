@@ -16,7 +16,17 @@ import { NextResponse } from "next/server"
 import OpenAI from "openai"
 
 export async function POST(req: Request) {
+  const startTime = Date.now()
+  const MAX_PROCESSING_TIME = 9 * 60 * 1000 // 9 minutes (leave buffer for Next.js timeout)
+  let timeoutId: NodeJS.Timeout | undefined
+
   try {
+    // Set up timeout monitoring
+    timeoutId = setTimeout(() => {
+      console.error("Processing timeout detected - stopping processing")
+      throw new Error("Processing timeout exceeded 9 minutes")
+    }, MAX_PROCESSING_TIME)
+
     const supabaseAdmin = createClient<Database>(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -29,6 +39,21 @@ export async function POST(req: Request) {
     const file_id = formData.get("file_id") as string
     const embeddingsProvider = formData.get("embeddingsProvider") as string
 
+    // Validate inputs
+    if (!file_id || !embeddingsProvider) {
+      clearTimeout(timeoutId)
+      throw new Error(
+        "Missing required parameters: file_id and embeddingsProvider"
+      )
+    }
+
+    if (!["openai", "local"].includes(embeddingsProvider)) {
+      clearTimeout(timeoutId)
+      throw new Error(
+        "Invalid embeddings provider. Must be 'openai' or 'local'"
+      )
+    }
+
     const { data: fileMetadata, error: metadataError } = await supabaseAdmin
       .from("files")
       .select("*")
@@ -36,29 +61,106 @@ export async function POST(req: Request) {
       .single()
 
     if (metadataError) {
+      clearTimeout(timeoutId)
       throw new Error(
         `Failed to retrieve file metadata: ${metadataError.message}`
       )
     }
 
     if (!fileMetadata) {
-      throw new Error("File not found")
+      clearTimeout(timeoutId)
+      throw new Error("File not found in database")
     }
 
     if (fileMetadata.user_id !== profile.user_id) {
-      throw new Error("Unauthorized")
+      clearTimeout(timeoutId)
+      throw new Error("Unauthorized: File belongs to different user")
     }
+
+    // Check if file is too large
+    if (fileMetadata.size > 200 * 1024 * 1024) {
+      // 200MB limit
+      clearTimeout(timeoutId)
+      throw new Error("File too large: Maximum size is 200MB")
+    }
+
+    // Check if file has already been processed or is currently processing
+    const { data: existingChunks } = await supabaseAdmin
+      .from("file_items")
+      .select("id")
+      .eq("file_id", file_id)
+      .limit(1)
+
+    if (existingChunks && existingChunks.length > 0) {
+      clearTimeout(timeoutId)
+      console.log(`File ${file_id} already processed, skipping`)
+      return new NextResponse(
+        JSON.stringify({
+          message: "File already processed",
+          statistics: { totalChunks: 0, totalTokens: 0, batchesProcessed: 0 }
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" }
+        }
+      )
+    }
+
+    // Check if file is currently being processed (type assertion for new fields)
+    if ((fileMetadata as any).processing_status === "processing") {
+      clearTimeout(timeoutId)
+      throw new Error("File is currently being processed by another request")
+    }
+
+    // Mark file as processing (type assertion for new fields)
+    await supabaseAdmin
+      .from("files")
+      .update({
+        processing_status: "processing",
+        processing_started_at: new Date().toISOString(),
+        processing_error: null
+      } as any)
+      .eq("id", file_id)
 
     const { data: file, error: fileError } = await supabaseAdmin.storage
       .from("files")
       .download(fileMetadata.file_path)
 
-    if (fileError)
-      throw new Error(`Failed to retrieve file: ${fileError.message}`)
+    if (fileError) {
+      clearTimeout(timeoutId)
+      throw new Error(
+        `Failed to retrieve file from storage: ${fileError.message}`
+      )
+    }
 
-    const fileBuffer = Buffer.from(await file.arrayBuffer())
-    const blob = new Blob([fileBuffer])
+    if (!file) {
+      clearTimeout(timeoutId)
+      throw new Error("File not found in storage")
+    }
+
+    let fileBuffer: Buffer
+    let blob: Blob
+
+    try {
+      fileBuffer = Buffer.from(await file.arrayBuffer())
+      blob = new Blob([fileBuffer])
+    } catch (error: any) {
+      clearTimeout(timeoutId)
+      throw new Error(`Failed to read file data: ${error.message}`)
+    }
+
+    // Validate file size
+    if (fileBuffer.length === 0) {
+      clearTimeout(timeoutId)
+      throw new Error("File is empty")
+    }
+
     const fileExtension = fileMetadata.name.split(".").pop()?.toLowerCase()
+
+    if (!fileExtension) {
+      clearTimeout(timeoutId)
+      throw new Error("File has no extension")
+    }
 
     if (embeddingsProvider === "openai") {
       try {
@@ -285,14 +387,24 @@ export async function POST(req: Request) {
     // Execute the batch processing
     await processFileInBatches()
 
-    // Update file metadata with total tokens
+    // Update file metadata with total tokens and mark as completed (type assertion for new fields)
     await supabaseAdmin
       .from("files")
-      .update({ tokens: totalTokens })
+      .update({
+        tokens: totalTokens,
+        processing_status: "completed",
+        processing_completed_at: new Date().toISOString(),
+        processing_error: null
+      } as any)
       .eq("id", file_id)
 
-    // Log final success with statistics
-    console.log(`✅ File processing completed successfully!`)
+    // Clear timeout since processing completed successfully
+    clearTimeout(timeoutId)
+
+    const processingTime = Date.now() - startTime
+    console.log(
+      `✅ File processing completed successfully in ${Math.round(processingTime / 1000)}s!`
+    )
     console.log(
       `📊 Statistics: ${totalChunks} chunks, ${totalTokens} total tokens`
     )
@@ -304,7 +416,8 @@ export async function POST(req: Request) {
         statistics: {
           totalChunks,
           totalTokens,
-          batchesProcessed: Math.ceil(totalChunks / BATCH_SIZE)
+          batchesProcessed: Math.ceil(totalChunks / BATCH_SIZE),
+          processingTimeMs: processingTime
         }
       }),
       {
@@ -315,11 +428,106 @@ export async function POST(req: Request) {
       }
     )
   } catch (error: any) {
-    console.log(`Error in retrieval/process: ${error.stack}`)
-    const errorMessage = error?.message || "An unexpected error occurred"
-    const errorCode = error.status || 500
-    return new Response(JSON.stringify({ message: errorMessage }), {
-      status: errorCode
-    })
+    // Clear timeout in case of error
+    if (typeof timeoutId !== "undefined") {
+      clearTimeout(timeoutId)
+    }
+
+    const processingTime = Date.now() - startTime
+    console.error(
+      `❌ Error in retrieval/process after ${Math.round(processingTime / 1000)}s:`,
+      error
+    )
+
+    // Update file status to failed
+    try {
+      const formData = await req.formData()
+      const file_id = formData.get("file_id") as string
+
+      if (file_id) {
+        const supabaseAdmin = createClient<Database>(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.SUPABASE_SERVICE_ROLE_KEY!
+        )
+
+        const errorStatus = error.message?.includes("timeout")
+          ? "timeout"
+          : "failed"
+
+        await supabaseAdmin
+          .from("files")
+          .update({
+            processing_status: errorStatus,
+            processing_completed_at: new Date().toISOString(),
+            processing_error: error.message || "Unknown error"
+          } as any)
+          .eq("id", file_id)
+      }
+    } catch (statusUpdateError) {
+      console.error(
+        "Failed to update file processing status:",
+        statusUpdateError
+      )
+    }
+
+    // Categorize errors for better user feedback
+    let errorMessage = "An unexpected error occurred"
+    let errorCode = 500
+
+    if (error.message?.includes("timeout")) {
+      errorMessage =
+        "Processing timed out. The file is too large or complex for processing."
+      errorCode = 408
+    } else if (
+      error.message?.includes("too large") ||
+      error.message?.includes("size")
+    ) {
+      errorMessage =
+        "File is too large for processing. Please try a smaller file."
+      errorCode = 413
+    } else if (
+      error.message?.includes("unauthorized") ||
+      error.message?.includes("Unauthorized")
+    ) {
+      errorMessage = "Unauthorized access to file."
+      errorCode = 403
+    } else if (
+      error.message?.includes("not found") ||
+      error.message?.includes("File not found")
+    ) {
+      errorMessage = "File not found. It may have been deleted."
+      errorCode = 404
+    } else if (
+      error.message?.includes("token") ||
+      error.message?.includes("limit")
+    ) {
+      errorMessage =
+        "File exceeds processing limits. Please try a smaller file."
+      errorCode = 413
+    } else if (
+      error.message?.includes("network") ||
+      error.message?.includes("connection")
+    ) {
+      errorMessage = "Network error during processing. Please try again."
+      errorCode = 503
+    } else {
+      errorMessage =
+        error?.message || "An unexpected error occurred during file processing"
+    }
+
+    return new Response(
+      JSON.stringify({
+        message: errorMessage,
+        processingTimeMs: processingTime,
+        error:
+          process.env.NODE_ENV === "development" ? error.message : undefined
+      }),
+      {
+        status: errorCode,
+        headers: {
+          "Content-Type": "application/json"
+        }
+      }
+    )
   }
 }

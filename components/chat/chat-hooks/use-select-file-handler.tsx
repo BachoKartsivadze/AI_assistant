@@ -174,6 +174,7 @@ export const useSelectFileHandler = () => {
               }
             ])
           } else {
+            // Add progress tracking for upload
             const createdFile = await createFile(
               file,
               {
@@ -186,10 +187,32 @@ export const useSelectFileHandler = () => {
                 type: simplifiedFileType
               },
               selectedWorkspace.id,
-              chatSettings.embeddingsProvider
+              chatSettings.embeddingsProvider,
+              progress => {
+                console.log(`Upload progress for ${file.name}: ${progress}%`)
+                // Update loading state to show progress
+                setNewMessageFiles(prev =>
+                  prev.map(item =>
+                    item.id === "loading"
+                      ? {
+                          ...item,
+                          name: `Uploading ${file.name}... ${progress}%`
+                        }
+                      : item
+                  )
+                )
+              }
             )
 
             setFiles(prev => [...prev, createdFile])
+
+            // Show success message
+            toast.success(
+              `File "${file.name}" uploaded successfully! Processing in background...`,
+              {
+                duration: 3000
+              }
+            )
 
             // Attach file to current assistant if one is selected
             await attachFileToAssistant(createdFile.id)
